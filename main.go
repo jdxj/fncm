@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
-	"os"
 )
 
 var (
@@ -25,17 +23,19 @@ func ConvertToLittle(bytes []byte) uint32 {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatalln("需要文件路径")
-	}
+	//if len(os.Args) < 2 {
+	//	log.Fatalln("需要文件路径")
+	//}
 
-	filePath := os.Args[1]
+	//filePath := os.Args[1]
 	//f, err := os.OpenFile(filePath, os.O_RDONLY, 0400)
 	//if err != nil {
 	//	log.Fatalln(err)
 	//}
 	//defer f.Close()
 	//log.Println("open ok")
+	filePath := "./music.ncm"
 	DecodeNCM(filePath, "./")
+	//DecodeNCM2(filePath, "./")
 
 }

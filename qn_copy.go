@@ -64,6 +64,7 @@ func DecodeNCM(filePath string, outputFolder string) {
 	decryptedKeyData := aesDecryptECB(Unhexlify(corekey), newKeyData)
 	// 跳过 `neteasecloudmusic` 17个字符
 	newDecryptKey := decryptedKeyData[17:]
+	fmt.Printf("rc4SBoxKey: %s\n", base64.StdEncoding.EncodeToString(newDecryptKey))
 	newKeyLength := len(newDecryptKey)
 
 	// s 盒初始化

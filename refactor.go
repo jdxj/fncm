@@ -114,10 +114,26 @@ func RC4SBox(key []byte) []byte {
 }
 
 func RC4StreamKey(sBox []byte) []byte {
-	return nil
+	streamKey := make([]byte, RC4SBoxSize)
+	for i := 0; i < RC4SBoxSize; i++ {
+		j := (int(sBox[i]) + int(sBox[(i+int(sBox[i]))&0xFF])) & 0xFF
+		streamKey[i] = sBox[j]
+	}
+	return streamKey
 }
 
-func RC4Encrypt(key []byte, reader io.Reader, writer io.Writer) error {
+func RC4Encrypt(key, ciphertext []byte) []byte {
+	sBox := RC4SBox(key)
+	sKey := RC4StreamKey(sBox)
+
+	res := make([]byte, 0, len(ciphertext))
+	for i := 0; i < len(ciphertext); i++ {
+		res = append(res, ciphertext[i]^sKey[(i+1)%RC4SBoxSize])
+	}
+	return res
+}
+
+func RC4EncryptTest(key []byte, reader io.Reader, writer io.Writer) error {
 	bufReader := bufio.NewReader(reader)
 	bufWriter := bufio.NewWriter(writer)
 	defer func() {

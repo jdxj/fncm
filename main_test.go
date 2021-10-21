@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/base64"
 	"fmt"
 	"testing"
@@ -30,8 +29,12 @@ func TestGenerateKey(t *testing.T) {
 }
 
 func TestMod(t *testing.T) {
-	fmt.Printf("%d\n", 7%3)
-	fmt.Printf("%d\n", 7&3)
+	fmt.Printf("%d\n", 6%3)
+	fmt.Printf("%d\n", 6&(2))
+	// 110
+	//  11
+	// ---
+	// 010
 }
 
 func rawRC4(key, data []byte) string {
@@ -74,14 +77,18 @@ func TestRC4(t *testing.T) {
 	res := rawRC4(AESKey, data)
 	fmt.Printf("res1: %s\n", res)
 
-	r := bytes.NewReader(data)
+	//r := bytes.NewReader(data)
+	//
+	//bw := &base64Writer{}
+	//err := RC4EncryptTest(AESKey, r, bw)
+	//if err != nil {
+	//	t.Fatalf("%s\n", err)
+	//}
+	//fmt.Printf("res2: %s\n", bw.Result())
 
-	bw := &base64Writer{}
-	err := RC4Encrypt(AESKey, r, bw)
-	if err != nil {
-		t.Fatalf("%s\n", err)
-	}
-	fmt.Printf("res2: %s\n", bw.Result())
+	res2Tmp := RC4Encrypt(AESKey, data)
+	res2 := base64.StdEncoding.EncodeToString(res2Tmp)
+	fmt.Printf("res2: %s\n", res2)
 }
 
 type base64Writer struct {
@@ -95,4 +102,13 @@ func (bw *base64Writer) Write(p []byte) (int, error) {
 
 func (bw *base64Writer) Result() string {
 	return base64.StdEncoding.EncodeToString(bw.buf)
+}
+
+func TestFNcm_Decrypt(t *testing.T) {
+	fn := NewFNcm("./music.ncm", "./")
+	err := fn.Decrypt()
+	if err != nil {
+		t.Fatalf("%s\n", err)
+	}
+	fmt.Printf("rc4SBoxKey: %s\n", base64.StdEncoding.EncodeToString(fn.rc4SBoxKey))
 }
