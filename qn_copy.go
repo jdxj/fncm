@@ -62,15 +62,18 @@ func DecodeNCM(filePath string, outputFolder string) {
 	}
 
 	decryptedKeyData := aesDecryptECB(Unhexlify(corekey), newKeyData)
+	// 跳过 `neteasecloudmusic` 17个字符
 	newDecryptKey := decryptedKeyData[17:]
 	newKeyLength := len(newDecryptKey)
 
+	// s 盒初始化
 	s := make([]byte, 256)
 	for i := 0; i < 256; i++ {
 		s[i] = byte(i)
 	}
 	j := 0
 
+	// RC4-KSA算法生成S盒
 	for i := 0; i < 256; i++ {
 		j = (j + int(s[i]) + int(newDecryptKey[i%newKeyLength])) & 0xFF
 		s[i], s[j] = s[j], s[i]
@@ -99,11 +102,13 @@ func DecodeNCM(filePath string, outputFolder string) {
 		}
 
 		// identifier = string(newMetaData)
+		// 跳过 `163 key(Don't modify):` 22个字符
 		realMeataData, err := base64.StdEncoding.DecodeString(string(newMetaData[22:]))
 		if err != nil {
 			logger.Println(err)
 		}
 		decodeMetaData := aesDecryptECB(Unhexlify(metaKey), realMeataData)
+		// 跳过 `music:` 6个字符
 		json.Unmarshal(decodeMetaData[6:], &metaDataMap)
 	} else {
 		if int64(info.Size()) > int64(1024*1024*16) {
@@ -118,7 +123,11 @@ func DecodeNCM(filePath string, outputFolder string) {
 		format = metaFormat.(string)
 	}
 
+	// 没有 crc
+
 	f.Seek(5, 1)
+
+	// 解析 image 不一样
 	imageSpaceBytes := make([]byte, 4)
 	f.Read(imageSpaceBytes)
 	imageSpace := binary.LittleEndian.Uint32(imageSpaceBytes)
@@ -137,16 +146,21 @@ func DecodeNCM(filePath string, outputFolder string) {
 		return
 	}
 
+	// 开始解析音乐数据
+
 	dataLen := info.Size() - pos
 	data := make([]byte, dataLen)
 	f.Read(data)
 
+	// RC4 生成流密钥
 	stream := make([]byte, 256)
 	for i := 0; i < 256; i++ {
 		j := (int(s[i]) + int(s[(i+int(s[i]))&0xFF])) & 0xFF
 		stream[i] = s[j]
 	}
 
+	// 流密钥到 data 的映射
+	// 用求余, 没必要生成
 	newStream := make([]byte, 0)
 	for i := 0; i < len(data); i++ {
 		v := stream[(i+1)%256]

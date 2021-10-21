@@ -10,4 +10,7 @@ require (
 	github.com/wsdbd/qn-decoder v0.0.0-20201118033741-35399b768042
 )
 
-require golang.org/x/text v0.3.2 // indirect
+require (
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	golang.org/x/text v0.3.2 // indirect
+)
