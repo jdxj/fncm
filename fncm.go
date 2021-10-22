@@ -432,22 +432,22 @@ func (fn *FNcm) embedMetaFlac() error {
 	_ = vc.Add(flacvorbis.FIELD_TITLE, fn.meta.MustMusicName())
 	_ = vc.Add(flacvorbis.FIELD_ALBUM, fn.meta.MustAlbum())
 	_ = vc.Add(flacvorbis.FIELD_ARTIST, fn.meta.MustArtist())
-	mdb := vc.Marshal()
+	mdbVC := vc.Marshal()
 	if vcIndex >= 0 {
-		flacFile.Meta[vcIndex] = &mdb
+		flacFile.Meta[vcIndex] = &mdbVC
 	} else {
-		flacFile.Meta = append(flacFile.Meta, &mdb)
+		flacFile.Meta = append(flacFile.Meta, &mdbVC)
 	}
 
 	if pic == nil {
 		pic, err = flacpicture.NewFromImageData(flacpicture.PictureTypeFrontCover, "Front cover",
 			fn.image, fn.imageFormat())
 	}
-	mdb = pic.Marshal()
+	mdbPic := pic.Marshal()
 	if picIndex >= 0 {
-		flacFile.Meta[picIndex] = &mdb
+		flacFile.Meta[picIndex] = &mdbPic
 	} else {
-		flacFile.Meta = append(flacFile.Meta, &mdb)
+		flacFile.Meta = append(flacFile.Meta, &mdbPic)
 	}
 	return flacFile.Save(fn.fileName)
 }

@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/go-flac/flacpicture"
+	"github.com/go-flac/flacvorbis"
+	"github.com/go-flac/go-flac"
 )
 
 func TestPrintAscii(t *testing.T) {
@@ -105,6 +109,31 @@ func (bw *base64Writer) Result() string {
 	return base64.StdEncoding.EncodeToString(bw.buf)
 }
 
+func TestFlacMeta(t *testing.T) {
+	flacFile, err := flac.ParseFile("./music.flac")
+	if err != nil {
+		t.Fatalf("%s\n", err)
+	}
+	for _, v := range flacFile.Meta {
+		fmt.Printf("type: %d\n", v.Type)
+		if v.Type == flac.VorbisComment {
+			b, err := flacvorbis.ParseFromMetaDataBlock(*v)
+			if err != nil {
+				t.Errorf("%s\n", err)
+			}
+			fmt.Printf("%v\n", b.Comments)
+		}
+		if v.Type == flac.Picture {
+			b, err := flacpicture.ParseFromMetaDataBlock(*v)
+			if err != nil {
+				t.Errorf("%s\n", err)
+			}
+			fmt.Printf("pic describe: %s\n", b.Description)
+			fmt.Printf("pic size: %d\n", len(b.ImageData))
+		}
+	}
+}
+
 func TestFNcm_Decrypt(t *testing.T) {
 	fn := NewFNcm("./music.ncm", "./")
 	err := fn.Decrypt()
@@ -114,8 +143,9 @@ func TestFNcm_Decrypt(t *testing.T) {
 	fmt.Printf("rc4SBoxKey: %s\n", base64.StdEncoding.EncodeToString(fn.rc4SBoxKey))
 	fmt.Printf("rc4StreamKey: %s\n", base64.StdEncoding.EncodeToString(fn.rc4StreamKey))
 	fmt.Printf("meta: %+v\n", fn.meta)
+	fmt.Printf("meta: artist: %s\n", fn.meta.MustArtist())
 	//fmt.Printf("image: %s\n", base64.StdEncoding.EncodeToString(fn.image))
-	fmt.Printf("%x", fn.image[:4])
+	fmt.Printf("mime header: %x\n", fn.image[:4])
 
 	fmt.Printf("imageLeft: %d\n", fn.imageLeft)
 	f, err := os.Create("./abc.jpg")
