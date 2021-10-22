@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -111,4 +112,19 @@ func TestFNcm_Decrypt(t *testing.T) {
 		t.Fatalf("%s\n", err)
 	}
 	fmt.Printf("rc4SBoxKey: %s\n", base64.StdEncoding.EncodeToString(fn.rc4SBoxKey))
+	fmt.Printf("rc4StreamKey: %s\n", base64.StdEncoding.EncodeToString(fn.rc4StreamKey))
+	fmt.Printf("meta: %+v\n", fn.meta)
+	//fmt.Printf("image: %s\n", base64.StdEncoding.EncodeToString(fn.image))
+	fmt.Printf("%x", fn.image[:4])
+
+	fmt.Printf("imageLeft: %d\n", fn.imageLeft)
+	f, err := os.Create("./abc.jpg")
+	if err != nil {
+		t.Fatalf("%s\n", err)
+	}
+	defer f.Close()
+	_, err = f.Write(fn.image)
+	if err != nil {
+		t.Fatalf("%s\n", err)
+	}
 }

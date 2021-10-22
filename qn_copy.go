@@ -112,6 +112,7 @@ func DecodeNCM(filePath string, outputFolder string) {
 		// 跳过 `music:` 6个字符
 		json.Unmarshal(decodeMetaData[6:], &metaDataMap)
 	} else {
+		fmt.Printf("find meta parse location\n")
 		if int64(info.Size()) > int64(1024*1024*16) {
 			format = "flac"
 		}
@@ -123,6 +124,7 @@ func DecodeNCM(filePath string, outputFolder string) {
 	if metaFormat, ok := metaDataMap["format"]; ok {
 		format = metaFormat.(string)
 	}
+	fmt.Printf("meta: %v\n", metaDataMap)
 
 	// 没有 crc
 
@@ -146,6 +148,7 @@ func DecodeNCM(filePath string, outputFolder string) {
 		logger.Println(err)
 		return
 	}
+	fmt.Printf("imageLeft: %d\n", imageSpace-imageSize)
 
 	// 开始解析音乐数据
 
@@ -159,6 +162,7 @@ func DecodeNCM(filePath string, outputFolder string) {
 		j := (int(s[i]) + int(s[(i+int(s[i]))&0xFF])) & 0xFF
 		stream[i] = s[j]
 	}
+	fmt.Printf("rc4StreamKey: %s\n", base64.StdEncoding.EncodeToString(stream))
 
 	// 流密钥到 data 的映射
 	// 用求余, 没必要生成
@@ -169,6 +173,9 @@ func DecodeNCM(filePath string, outputFolder string) {
 	}
 
 	newData := strxor(string(data), string(newStream))
+	testNewData := []byte(newData)
+	fmt.Printf("music first byte: %x\n", testNewData[0])
+	fmt.Printf("music last byte: %x\n", testNewData[len(testNewData)-1])
 
 	extname := filepath.Ext(filePath)
 	basename := filepath.Base(filePath)
@@ -208,6 +215,7 @@ func DecodeNCM(filePath string, outputFolder string) {
 		artistName = strings.Join(nameArr, "/")
 	}
 
+	// https://gist.github.com/ldong/f334b9dcd421c99e094d
 	imageFormat := "image/jpeg"
 	if string(imageDataBytes[0:4]) == string(Unhexlify("89504E47")) {
 		imageFormat = "image/png"
@@ -246,9 +254,14 @@ func DecodeNCM(filePath string, outputFolder string) {
 		if err != nil {
 			logger.Println(err)
 		}
+		for i, v := range flacFile.Meta {
+			fmt.Printf("flac: meta %d: type: %d\n", i, v.Type)
+		}
 
 		cmts, idx := extractFLACComment(outPath)
+		fmt.Printf("cmts1: %#v, idx: %d\n", cmts, idx)
 		if cmts == nil && idx > 0 {
+			fmt.Printf("cmts == nil\n")
 			cmts = flacvorbis.New()
 		}
 		cmts.Add(flacvorbis.FIELD_TITLE, fmt.Sprintf("%v", metaDataMap["musicName"]))
@@ -264,6 +277,7 @@ func DecodeNCM(filePath string, outputFolder string) {
 
 		var pic *flacpicture.MetadataBlockPicture
 		pic = extractFLACCover(outPath)
+		fmt.Printf("pic is nil: %t\n", pic == nil)
 		if pic != nil {
 			pic.ImageData = imageDataBytes
 		} else {
