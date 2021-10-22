@@ -120,7 +120,7 @@ func (fn *FNcm) Decrypt() error {
 	fn.saveMusic()
 	fn.embedMeta()
 
-	fn.close()
+	fn.closeNCM()
 	return fn.err
 }
 
@@ -135,7 +135,7 @@ func (fn *FNcm) skipUnknownBytes(size int) {
 	}
 }
 
-func (fn *FNcm) close() {
+func (fn *FNcm) closeNCM() {
 	_ = fn.ncm.Close()
 }
 

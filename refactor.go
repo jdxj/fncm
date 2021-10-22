@@ -1,14 +1,9 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"crypto/aes"
-	"crypto/rc4"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 )
 
 const (
@@ -41,43 +36,6 @@ var (
 	ErrMetaDecryptFailed       = errors.New("meta decrypt failed")
 )
 
-func VerifyMagicHeader(reader io.Reader) error {
-	buf := make([]byte, MagicHeaderSize)
-	_, err := reader.Read(buf)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrVerifyMagicHeaderFailed, err)
-	}
-
-	if !bytes.Equal(MagicHeader, buf) {
-		return fmt.Errorf("%w: not ncm file", ErrVerifyMagicHeaderFailed)
-	}
-	return nil
-}
-
-func SkipUnknownBytes(reader io.Seeker, size int64) error {
-	_, err := reader.Seek(size, 1)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrSkipBytesFailed, err)
-	}
-	return nil
-}
-
-func ReadBytesByLeading(reader io.Reader) ([]byte, error) {
-	leadingBytes := make([]byte, LeadingSize)
-	n, err := reader.Read(leadingBytes)
-	if n < LeadingSize || err != nil {
-		return nil, fmt.Errorf("%w: n: %d, err: %s", ErrReadDataFailed, n, err)
-	}
-
-	dataSize := binary.LittleEndian.Uint32(leadingBytes)
-	dataBytes := make([]byte, dataSize)
-	n, err = reader.Read(dataBytes)
-	if n < len(dataBytes) || err != nil {
-		return nil, fmt.Errorf("%w: n: %d, err: %s", ErrReadDataFailed, n, err)
-	}
-	return dataBytes, nil
-}
-
 func AESDecryptECB(key, ciphertext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -98,68 +56,4 @@ func AESDecryptECB(key, ciphertext []byte) ([]byte, error) {
 
 	trim := dataSize - int(plaintext[dataSize-1])
 	return plaintext[:trim], nil
-}
-
-// RC4SBox 根据 key 生成 S 盒 https://zh.wikipedia.org/wiki/RC4
-func RC4SBox(key []byte) []byte {
-	// 1. 初始化
-	sBox := make([]byte, RC4SBoxSize)
-	for i := 0; i < RC4SBoxSize; i++ {
-		sBox[i] = byte(i)
-	}
-
-	// 2. 打乱
-	keySize := len(key)
-	for i, j := 0, 0; i < RC4SBoxSize; i++ {
-		j = (j + int(sBox[i]) + int(key[i%keySize])) % RC4SBoxSize
-		sBox[i], sBox[j] = sBox[j], sBox[i]
-	}
-	return sBox
-}
-
-func RC4StreamKey(sBox []byte) []byte {
-	streamKey := make([]byte, RC4SBoxSize)
-	for i := 0; i < RC4SBoxSize; i++ {
-		j := (int(sBox[i]) + int(sBox[(i+int(sBox[i]))&0xFF])) & 0xFF
-		streamKey[i] = sBox[j]
-	}
-	return streamKey
-}
-
-func RC4Encrypt(key, ciphertext []byte) []byte {
-	sBox := RC4SBox(key)
-	sKey := RC4StreamKey(sBox)
-
-	res := make([]byte, 0, len(ciphertext))
-	for i := 0; i < len(ciphertext); i++ {
-		res = append(res, ciphertext[i]^sKey[(i+1)%RC4SBoxSize])
-	}
-	return res
-}
-
-func RC4EncryptTest(key []byte, reader io.Reader, writer io.Writer) error {
-	bufReader := bufio.NewReader(reader)
-	bufWriter := bufio.NewWriter(writer)
-	defer func() {
-		_ = bufWriter.Flush()
-	}()
-
-	cipher, err := rc4.NewCipher(key)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrRC4DecryptFailed, err)
-	}
-
-	src := make([]byte, BufferSize)
-	des := make([]byte, BufferSize)
-	for n, err := bufReader.Read(src); err == nil; n, err = bufReader.Read(src) {
-		cipher.XORKeyStream(des[:n], src[:n])
-		_, err := bufWriter.Write(des[:n])
-		if err != nil {
-			break
-		}
-	}
-	if err != nil {
-		err = fmt.Errorf("%w: %s", ErrRC4DecryptFailed, err)
-	}
-	return err
 }

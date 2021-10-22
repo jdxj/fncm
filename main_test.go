@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/go-flac/flacpicture"
 	"github.com/go-flac/flacvorbis"
@@ -77,38 +78,6 @@ func rawRC4(key, data []byte) string {
 	return base64.StdEncoding.EncodeToString([]byte(newData))
 }
 
-func TestRC4(t *testing.T) {
-	data := []byte{'a', 'b', 'c'}
-	res := rawRC4(AESKey, data)
-	fmt.Printf("res1: %s\n", res)
-
-	//r := bytes.NewReader(data)
-	//
-	//bw := &base64Writer{}
-	//err := RC4EncryptTest(AESKey, r, bw)
-	//if err != nil {
-	//	t.Fatalf("%s\n", err)
-	//}
-	//fmt.Printf("res2: %s\n", bw.Result())
-
-	res2Tmp := RC4Encrypt(AESKey, data)
-	res2 := base64.StdEncoding.EncodeToString(res2Tmp)
-	fmt.Printf("res2: %s\n", res2)
-}
-
-type base64Writer struct {
-	buf []byte
-}
-
-func (bw *base64Writer) Write(p []byte) (int, error) {
-	bw.buf = append(bw.buf, p...)
-	return len(p), nil
-}
-
-func (bw *base64Writer) Result() string {
-	return base64.StdEncoding.EncodeToString(bw.buf)
-}
-
 func TestFlacMeta(t *testing.T) {
 	flacFile, err := flac.ParseFile("./music.flac")
 	if err != nil {
@@ -135,6 +104,7 @@ func TestFlacMeta(t *testing.T) {
 }
 
 func TestFNcm_Decrypt(t *testing.T) {
+	t1 := time.Now()
 	fn := NewFNcm("./music.ncm", "./")
 	err := fn.Decrypt()
 	if err != nil {
@@ -157,4 +127,6 @@ func TestFNcm_Decrypt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s\n", err)
 	}
+
+	fmt.Printf("since: %d\n", time.Since(t1).Milliseconds())
 }
