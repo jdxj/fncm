@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,28 +12,6 @@ import (
 	"github.com/go-flac/flacvorbis"
 	"github.com/go-flac/go-flac"
 )
-
-func TestPrintAscii(t *testing.T) {
-	PrintAscii(coreBytes)
-	PrintAscii(metaBytes)
-	PrintAscii(magicBytes)
-}
-
-func TestConvertToLittle(t *testing.T) {
-	v := ConvertToLittle([]byte{0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-	fmt.Printf("%d\n", v)
-}
-
-func TestGenerateKey(t *testing.T) {
-	res := generateKey(coreBytes)
-	for _, v := range coreBytes {
-		fmt.Printf("%x, ", v)
-	}
-	fmt.Println()
-	for _, v := range res {
-		fmt.Printf("%x, ", v)
-	}
-}
 
 func TestMod(t *testing.T) {
 	fmt.Printf("%d\n", 6%3)
@@ -129,4 +108,18 @@ func TestFNcm_Decrypt(t *testing.T) {
 	}
 
 	fmt.Printf("since: %d\n", time.Since(t1).Milliseconds())
+}
+
+func TestFile(t *testing.T) {
+	info, err := os.Stat("music.flac")
+	if err != nil {
+		t.Fatalf("%s\n", err)
+	}
+	fmt.Printf("name: %s\n", info.Name())
+	fmt.Printf("ext: %s\n", filepath.Ext(info.Name()))
+	abs, err := filepath.Abs(info.Name())
+	if err != nil {
+		t.Fatalf("%s\n", err)
+	}
+	fmt.Printf("abs: %s\n", abs)
 }
