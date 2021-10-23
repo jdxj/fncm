@@ -1,3 +1,6 @@
+file := fncm.out
+
 .PHONY: build
 build:
-	go build -o fncm.out ./*.go
+	go build -ldflags '-s -w' -o $(file) ./*.go
+	upx --best $(file)

@@ -22,41 +22,6 @@ func TestMod(t *testing.T) {
 	// 010
 }
 
-func rawRC4(key, data []byte) string {
-	keySize := len(key)
-
-	// s 盒初始化
-	s := make([]byte, 256)
-	for i := 0; i < 256; i++ {
-		s[i] = byte(i)
-	}
-	j := 0
-
-	// RC4-KSA算法生成S盒
-	for i := 0; i < 256; i++ {
-		j = (j + int(s[i]) + int(key[i%keySize])) & 0xFF
-		s[i], s[j] = s[j], s[i]
-	}
-
-	// RC4 生成流密钥
-	stream := make([]byte, 256)
-	for i := 0; i < 256; i++ {
-		j := (int(s[i]) + int(s[(i+int(s[i]))&0xFF])) & 0xFF
-		stream[i] = s[j]
-	}
-
-	// 流密钥到 data 的映射
-	// 用求余, 没必要生成
-	newStream := make([]byte, 0)
-	for i := 0; i < len(data); i++ {
-		v := stream[(i+1)%256]
-		newStream = append(newStream, v)
-	}
-
-	newData := strxor(string(data), string(newStream))
-	return base64.StdEncoding.EncodeToString([]byte(newData))
-}
-
 func TestFlacMeta(t *testing.T) {
 	flacFile, err := flac.ParseFile("./music.flac")
 	if err != nil {
