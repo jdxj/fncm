@@ -3,9 +3,11 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/aes"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,9 +21,52 @@ import (
 )
 
 const (
-	// DefaultBufferSize 1MB
-	DefaultBufferSize = 1 << 20
+	LeadingSize       = 4
+	RC4SBoxSize       = 256
+	DefaultBufferSize = 8 * (1 << 20) // x * 1MB
 )
+
+var (
+	MagicHeader = []byte{0x43, 0x54, 0x45, 0x4e, 0x46, 0x44, 0x41, 0x4d}
+	AESKey      = []byte{0x68, 0x7A, 0x48, 0x52, 0x41, 0x6D, 0x73, 0x6F, 0x35, 0x6B, 0x49, 0x6E, 0x62, 0x61, 0x78, 0x57}
+	MetaKey     = []byte{0x23, 0x31, 0x34, 0x6C, 0x6A, 0x6B, 0x5F, 0x21, 0x5C, 0x5D, 0x26, 0x30, 0x55, 0x3C, 0x27, 0x28}
+	PngHeader   = []byte{0x89, 0x50, 0x4E, 0x47}
+
+	PngHeaderSize   = len(PngHeader)
+	MagicHeaderSize = len(MagicHeader)
+)
+
+var (
+	ErrVerifyMagicHeaderFailed = errors.New("verify magic header failed")
+	ErrSkipBytesFailed         = errors.New("skip bytes failed")
+	ErrReadDataFailed          = errors.New("reader data failed")
+	ErrAESDecryptECBFailed     = errors.New("aes decrypt ecb failed")
+	ErrMetaDecryptFailed       = errors.New("meta decrypt failed")
+	ErrEmbedMetaMp3Failed      = errors.New("embed meta mp3 failed")
+	ErrEmbedMetaFlacFailed     = errors.New("embed meta flac failed")
+)
+
+func AESDecryptECB(key, ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrAESDecryptECBFailed, err)
+	}
+	blockSize := block.BlockSize()
+
+	dataSize := len(ciphertext)
+	if dataSize < blockSize {
+		return nil, fmt.Errorf("%w: invalid ciphertext", ErrAESDecryptECBFailed)
+	}
+	plaintext := make([]byte, dataSize)
+
+	for start := 0; start < dataSize; start += blockSize {
+		end := start + blockSize
+		block.Decrypt(plaintext[start:end], ciphertext[start:end])
+	}
+
+	trim := dataSize - int(plaintext[dataSize-1])
+	return plaintext[:trim], nil
+}
 
 type Meta struct {
 	Format        string          `json:"format"`
@@ -55,7 +100,7 @@ func (m *Meta) MustArtist() string {
 	var artist string
 	names := make([]string, 0, len(m.Artist))
 	for _, v := range m.Artist {
-		if len(v) > 1 {
+		if len(v) > 0 {
 			names = append(names, fmt.Sprintf("%v", v[0]))
 		}
 	}
@@ -93,17 +138,18 @@ type FNcm struct {
 	// output specifies the storage path
 	output string
 
-	ncm    *os.File
 	reader *bufio.Reader
 	writer *bufio.Writer
+	ncm    *os.File
+	music  *os.File
 
-	err          error
 	rc4SBoxKey   []byte
 	rc4StreamKey []byte
-	meta         *Meta
 	image        []byte
+	err          error
 	imageLeft    int
-	fileName     string
+	meta         *Meta
+	outPath      string
 }
 
 // Decrypt 主流程
@@ -117,10 +163,10 @@ func (fn *FNcm) Decrypt() error {
 	fn.skipUnknownBytes(5)
 	fn.decryptImage()
 	fn.skipUnknownBytes(fn.imageLeft)
+	fn.createMusic()
 	fn.saveMusic()
+	fn.closeFile()
 	fn.embedMeta()
-
-	fn.closeNCM()
 	return fn.err
 }
 
@@ -135,18 +181,45 @@ func (fn *FNcm) skipUnknownBytes(size int) {
 	}
 }
 
-func (fn *FNcm) closeNCM() {
-	_ = fn.ncm.Close()
-}
-
 func (fn *FNcm) openNCM() {
-	// todo: file.close()
+	if fn.err != nil {
+		return
+	}
+
 	fn.ncm, fn.err = os.OpenFile(fn.input, os.O_RDONLY, 0400)
 	if fn.err != nil {
 		return
 	}
 	fn.reader.Reset(fn.ncm)
 	return
+}
+
+func (fn *FNcm) createMusic() {
+	if fn.err != nil {
+		return
+	}
+
+	ext := filepath.Ext(fn.input)
+	base := filepath.Base(fn.input)
+	filename := strings.TrimSuffix(base, ext)
+	base = fmt.Sprintf("%s.%s", filename, fn.meta.Format)
+	fn.outPath = filepath.Join(fn.output, base)
+	fn.music, fn.err = os.Create(fn.outPath)
+	if fn.err != nil {
+		return
+	}
+	fn.writer.Reset(fn.music)
+}
+
+func (fn *FNcm) closeFile() {
+	if fn.ncm != nil {
+		_ = fn.ncm.Close()
+	}
+	_ = fn.writer.Flush()
+	if fn.music != nil {
+		_ = fn.music.Sync()
+		_ = fn.music.Close()
+	}
 }
 
 func (fn *FNcm) verifyMagicHeader() {
@@ -318,27 +391,8 @@ func (fn *FNcm) saveMusic() {
 		return
 	}
 
-	extname := filepath.Ext(fn.input)
-	basename := filepath.Base(fn.input)
-	filename := strings.TrimSuffix(basename, extname)
-	fn.fileName = fmt.Sprintf("%s.%s", filename, fn.meta.Format)
-	fn.fileName = filepath.Join(fn.output, fn.fileName)
-	f, err := os.Create(fn.fileName)
-	if err != nil {
-		fn.err = err
-		return
-	}
-	defer func() {
-		_ = f.Sync()
-		_ = f.Close()
-	}()
-	fn.writer.Reset(f)
-	defer func() {
-		_ = fn.writer.Flush()
-	}()
-
-	for i, b := 0, byte(0); ; i++ {
-		b, err = fn.reader.ReadByte()
+	for i := 0; ; i++ {
+		b, err := fn.reader.ReadByte()
 		if err == io.EOF {
 			return
 		}
@@ -346,6 +400,7 @@ func (fn *FNcm) saveMusic() {
 			fn.err = err
 			return
 		}
+		// 用时间换空间
 		err = fn.writer.WriteByte(b ^ fn.rc4StreamKey[(i+1)%RC4SBoxSize])
 		if err != nil {
 			fn.err = err
@@ -368,9 +423,9 @@ func (fn *FNcm) imageFormat() string {
 
 // embedMetaMp3 不要在主流程调用
 func (fn *FNcm) embedMetaMp3() error {
-	mp3File, err := id3v2.Open(fn.fileName, id3v2.Options{Parse: false})
+	mp3File, err := id3v2.Open(fn.outPath, id3v2.Options{Parse: false})
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrEmbedMetaMp3Failed, err)
 	}
 	defer func() {
 		_ = mp3File.Close()
@@ -393,12 +448,16 @@ func (fn *FNcm) embedMetaMp3() error {
 		}
 		mp3File.AddAttachedPicture(pic)
 	}
-	return mp3File.Save()
+	err = mp3File.Save()
+	if err != nil {
+		err = fmt.Errorf("%w: %s", ErrEmbedMetaMp3Failed, err)
+	}
+	return err
 }
 
 // embedMetaFlac 不要在主流程中调用
 func (fn *FNcm) embedMetaFlac() error {
-	flacFile, err := flac.ParseFile(fn.fileName)
+	flacFile, err := flac.ParseFile(fn.outPath)
 	if err != nil {
 		return err
 	}
@@ -414,14 +473,14 @@ func (fn *FNcm) embedMetaFlac() error {
 		if meta.Type == flac.VorbisComment {
 			vc, err = flacvorbis.ParseFromMetaDataBlock(*meta)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w: %s", ErrEmbedMetaFlacFailed, err)
 			}
 			vcIndex = i
 		}
 		if meta.Type == flac.Picture {
 			pic, err = flacpicture.ParseFromMetaDataBlock(*meta)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w: %s", ErrEmbedMetaFlacFailed, err)
 			}
 			picIndex = i
 		}
@@ -442,6 +501,9 @@ func (fn *FNcm) embedMetaFlac() error {
 	if pic == nil {
 		pic, err = flacpicture.NewFromImageData(flacpicture.PictureTypeFrontCover, "Front cover",
 			fn.image, fn.imageFormat())
+		if err != nil {
+			return fmt.Errorf("%w: %s", ErrEmbedMetaFlacFailed, err)
+		}
 	}
 	mdbPic := pic.Marshal()
 	if picIndex >= 0 {
@@ -449,7 +511,11 @@ func (fn *FNcm) embedMetaFlac() error {
 	} else {
 		flacFile.Meta = append(flacFile.Meta, &mdbPic)
 	}
-	return flacFile.Save(fn.fileName)
+	err = flacFile.Save(fn.outPath)
+	if err != nil {
+		err = fmt.Errorf("%w: %s", ErrEmbedMetaFlacFailed, err)
+	}
+	return err
 }
 
 func (fn *FNcm) embedMeta() {
